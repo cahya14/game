@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Blade — Tambah Enemy</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+      background: #101714;
+      color: #edf4ee;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(ellipse at top, #263d30, #101714 65%);
+    }
+
+    main {
+      width: min(100%, 480px);
+      padding: 28px;
+      border: 1px solid #405846;
+      border-radius: 16px;
+      background: #19231edb;
+      box-shadow: 0 20px 70px #0007;
+    }
+
+    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    p { color: #bdcbbf; line-height: 1.5; }
+    form, fieldset { display: grid; gap: 14px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    label { display: grid; gap: 6px; font-size: .92rem; }
+    input, select, button {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid #536a58;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: inherit;
+      background: #111a14;
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      background: #79b56b;
+      color: #102014;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary { background: #34473a; color: #edf4ee; }
+    button:disabled { cursor: wait; opacity: .65; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .note { font-size: .85rem; }
+    #status { min-height: 1.5em; overflow-wrap: anywhere; }
+    #status[data-kind="error"] { color: #ff9a8d; }
+    #status[data-kind="success"] { color: #a7e39a; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Tambah enemy</h1>
+    <p>Tambahkan Slime atau Goblin ke playground.  </p>
+
+    <form id="enemy-form">
+      <fieldset>
+        <label>
+          Jenis enemy
+          <select id="enemy-type" required>
+            <option value="slime">Slime - Pasukan</option>
+            <option value="goblin">Goblin - Pembuka Lahan Sawit</option>
+          </select>
+        </label>
+        <label>
+          Display name
+          <input id="display-name" type="text" maxlength="80" required>
+        </label>
+        <div class="row">
+          <label>
+            Posisi X
+            <input id="position-x" type="number" min="0" max="480" step="any" value="200" required>
+          </label>
+          <label>
+            Posisi Y
+            <input id="position-y" type="number" min="0" max="270" step="any" value="150" required>
+          </label>
+        </div>
+      </fieldset>
+      <button id="insert-button" type="submit">Tambahkan ke playground</button>
+    </form>
+
+    <p class="note">Area X 0–480 dan Y 0–270.</p>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+
+  <script>
+    (() => {
+      const SUPABASE_URL = "https://tvchnxhzmdqdabuaeyqy.supabase.co";
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2Y2hueGh6bWRxZGFidWFleXF5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMjUwODIsImV4cCI6MjA5ODYwMTA4Mn0.cZ3lsWfkQAAH-OlwgN0HRVRmzA_3WrMoPtLR3CZ6G2U";
+      const status = document.querySelector("#status");
+      const enemyForm = document.querySelector("#enemy-form");
+      const client = window.supabase?.createClient
+        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+        : null;
+
+      function showStatus(message, kind = "") {
+        status.textContent = message;
+        status.dataset.kind = kind;
+      }
+
+      function setBusy(button, busy, label) {
+        button.disabled = busy;
+        if (busy) {
+          button.dataset.originalText = button.textContent;
+          button.textContent = label;
+        } else if (button.dataset.originalText) {
+          button.textContent = button.dataset.originalText;
+          delete button.dataset.originalText;
+        }
+      }
+
+      enemyForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = document.querySelector("#insert-button");
+        setBusy(button, true, "Menyimpan...");
+        showStatus("");
+
+        try {
+          if (!client) {
+            throw new Error("Supabase SDK gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.");
+          }
+          const displayName = document.querySelector("#display-name").value.trim();
+          if (!displayName) throw new Error("Display name tidak boleh kosong.");
+
+          const record = {
+            level_id: "playground",
+            enemy_type: document.querySelector("#enemy-type").value,
+            display_name: displayName,
+            position_x: Number(document.querySelector("#position-x").value),
+            position_y: Number(document.querySelector("#position-y").value),
+            is_dead: false,
+          };
+          if (!Number.isFinite(record.position_x) || !Number.isFinite(record.position_y)) {
+            throw new Error("Posisi X dan Y harus berupa angka yang valid.");
+          }
+          if (record.position_x < 0 || record.position_x > 480 || record.position_y < 0 || record.position_y > 270) {
+            throw new Error("Posisi harus berada dalam playground (X 0–480, Y 0–270).");
+          }
+
+          const { error } = await client.from("godotblade_enemies").insert(record);
+          if (error) throw error;
+
+          showStatus(`${record.enemy_type} "${record.display_name}" berhasil ditambahkan.`, "success");
+          document.querySelector("#display-name").value = "";
+        } catch (error) {
+          showStatus(`Gagal menambahkan enemy: ${error.message}`, "error");
+        } finally {
+          setBusy(button, false, "");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
